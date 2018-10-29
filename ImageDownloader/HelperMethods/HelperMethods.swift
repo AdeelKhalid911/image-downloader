@@ -12,7 +12,6 @@ class HelperMethods: NSObject
 {
     static func setImageView(imageView:UIImageView, image:UIImage? = nil, duration:Float = 0.2)
     {
-        
         DispatchQueue.main.async
             {
                 imageView.layer.removeAllAnimations()

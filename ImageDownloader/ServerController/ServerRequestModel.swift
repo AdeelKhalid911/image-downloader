@@ -34,8 +34,7 @@ class ServerRequestModel
     var duplicateCacheFailureCallback   : Array< ((_:ServerRequestModel)           -> Void) >?
     var duplicateFailureCallback        : Array< ((_:ServerRequestModel,_:String)  -> Void) >?
     
-    // MARK: private methods
-    // MARK: public methods
+    // MARK: static methods
     static func create(type:REQUEST_TYPE, requestUrl:String, successCallbackFunc:((_:ServerRequestModel,_:Any) -> Void)?,cacheFailureCallbackFunc:((_:ServerRequestModel) -> Void)? = nil,failureCallbackFunc:((_:ServerRequestModel,_:String) -> Void)?,useLocalCache:Bool = true,info:String, queue:Constants.QUEUE_TYPE = .main) -> ServerRequestModel
     {
         let request = ServerRequestModel()

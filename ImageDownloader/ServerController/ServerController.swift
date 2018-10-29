@@ -22,11 +22,11 @@ class ServerController: NSObject
     
     var cacheData                = [String:Data]()
     var cacheImages              = [String:UIImage]()
+    var cacheImagesOrder         = [String]()
     
     let config = URLSessionConfiguration.default
     var urlSession:URLSession? = nil
     
-    // MARK: private methods
     override init()
     {
         super.init()
@@ -43,7 +43,7 @@ class ServerController: NSObject
         self.setQueueStatus(status: .playing, queue: .images)
     }
     
-    public func ResetServerData()
+    public func ResetCacheData()
     {
         cacheData.removeAll()
         cacheImages.removeAll()
@@ -83,15 +83,6 @@ class ServerController: NSObject
         return nil
     }
     
-    private func createUrlRequest(request:ServerRequestModel) -> URLRequest?
-    {
-        let url : URL? =  URL(string: request.url)
-        var urlRequest = URLRequest(url: url!)
-        urlRequest.httpMethod = getRequestType(requestModel: request)
-        urlRequest.httpBody   = request.requestData
-        return urlRequest
-    }
-    
     private func dispatchRequest(request:ServerRequestModel)
     {
         print("REQUEST ERROR : " + String(describing: request.requestType))
@@ -107,7 +98,7 @@ class ServerController: NSObject
         if urlRequest == nil { return}
         
         urlSession?.dataTask(with:urlRequest!, completionHandler: {(data, response, error) -> Void in
-            if let err = error as NSError!//, err.domain == NSURLErrorDomain && err.code == NSURLErrorNotConnectedToInternet
+            if let err = error as NSError!
             {
                 request.retryCount+=1
                 if(request.retryCount >= self.MAX_RETRY_COUNT)
@@ -120,7 +111,6 @@ class ServerController: NSObject
                 {
                     //retry till max retry count
                     self.dispatchRequest(request : request)
-                    //HelperMethod.Logs(message: "retrying request")
                 }
             }
             else
@@ -135,7 +125,6 @@ class ServerController: NSObject
                 
                 var reponseData:Any?
                 reponseData = self.updateCache(request: request,data: data!)
-                //let chatMetaModel:ChatMetaModel? = (reponseData as! ChatDataModel).ChatMetaDataModel
                 
                 if(reponseData == nil)
                 {
@@ -147,11 +136,19 @@ class ServerController: NSObject
                 // request completed successfully
                 self.dispatchSucessResponse(request: request,reponse: reponseData!)
                 self.removeRequestFromInprogressQueue(request:request)
-                // HelperMethod.Logs(message: "downloaded successfull")
             }
         }).resume()
     }
     
+    private func startTicker()
+    {
+        countdownTimer = Timer.scheduledTimer(timeInterval: 0.1, target: self, selector: #selector(dispatchPendingRequests), userInfo: nil, repeats: true)
+    }
+    
+    private func catalogSuccess(request:ServerRequestModel, data:Any) -> Void
+    {
+        catalogParser.ParseCatalogData(request:request ,data: data as! Data)
+    }
     
     private func dispatchSucessResponse(request:ServerRequestModel, reponse:Any)
     {
@@ -165,7 +162,93 @@ class ServerController: NSObject
         }
     }
     
-    // MARK: cache methods
+    // MARK: helper methods
+    private func createUrlRequest(request:ServerRequestModel) -> URLRequest?
+    {
+        let url : URL? =  URL(string: request.url)
+        var urlRequest = URLRequest(url: url!)
+        urlRequest.httpMethod = getRequestType(requestModel: request)
+        urlRequest.httpBody   = request.requestData
+        return urlRequest
+    }
+    
+    private func printLogs()
+    {
+        for queueType in statusQueue.keys {
+            if  statusQueue[queueType] == .playing {
+                print("Queue Active = " + String(describing: queueType))
+                
+                var requests = 0
+                if pendingRequestQueue[queueType] != nil {
+                    requests += pendingRequestQueue[queueType]!.count
+                }
+                if inprogressRequestQueue[queueType] != nil {
+                    requests += inprogressRequestQueue[queueType]!.count
+                }
+                print("request Count = ",requests)
+            }
+        }
+    }
+    
+    // MARK: fetch catalog JSON
+    func fetchCatalog(onSuccess:((_:ServerRequestModel, _:Any) -> Void)?, onFailure:((_:ServerRequestModel,_:String) -> Void)?)
+    {
+        let catalogURL = Constants.catalogURL
+        
+        let request = ServerRequestModel.create(type:REQUEST_TYPE.catalog, requestUrl: catalogURL, successCallbackFunc: onSuccess, failureCallbackFunc: onFailure,useLocalCache: true,info:"fetch_catalogue")
+        self.sendRequest(request: request)
+    }
+    
+    // MARK: public methods
+    public func sendRequest(request:ServerRequestModel) -> Void
+    {
+        let existInCache           = request.useCache == true ? self.existInCache(request:request) : false
+        let existInPendingRequest  = request.useCache == true ? self.existsInQueue(request:request,queue: &pendingRequestQueue) : false
+        let existInProgressRequest = request.useCache == true ? self.existsInQueue(request:request,queue: &inprogressRequestQueue) : false
+        
+        if(existInCache)
+        {
+            let val = self.getFromCache(request: request)
+            if(request.requestType == .image)
+            {
+                if(!checkImageInCache(url: request.url))
+                {
+                    request.dispatchSuccessCallback(response:val!)
+                }
+                else
+                {
+                    request.dispatchSuccessCallback(response:val!)
+                }
+                self.updateCacheImagesByCacheLimit(url: request.url)
+            }
+            else
+            {
+                request.dispatchSuccessCallback(response:val!)
+            }
+        }
+        else if(existInPendingRequest == true)
+        {
+            request.dispatchNotFoundInCache()
+            let index   = pendingRequestQueue[request.queue!]!.index{$0.url == request.url}
+            let pendingRequest = pendingRequestQueue[request.queue!]![index!]
+            pendingRequest.AppendCallbacks(newsuccessCallback: request.successCallback, newfailureCallback: request.failureCallback, cacheFailureCallback: request.cacheFailureCallback)
+        }
+        else if(existInProgressRequest == true)
+        {
+            request.dispatchNotFoundInCache()
+            let index   = inprogressRequestQueue[request.queue!]!.index{$0.url == request.url}
+            let pendingRequest = inprogressRequestQueue[request.queue!]![index!];
+            pendingRequest.AppendCallbacks(newsuccessCallback: request.successCallback, newfailureCallback: request.failureCallback,cacheFailureCallback: request.cacheFailureCallback)
+        }
+        else
+        {
+            request.dispatchNotFoundInCache()
+            self.insertInPendingQueue(request: request)
+        }
+    }
+    
+    
+    // Methods related to cache
     private func updateCache(request:ServerRequestModel,data:Data)-> Any?
     {
         var dataObject : Any!
@@ -179,6 +262,7 @@ class ServerController: NSObject
             if let image = UIImage (data: data)
             {
                 self.cacheImages[request.url] = image
+                self.updateCacheImagesByCacheLimit(url: request.url)
                 dataObject = image
             }
             break
@@ -195,16 +279,6 @@ class ServerController: NSObject
         }
     }
     
-    private func checkImageInCache(url:String) -> Bool
-    {
-        if(self.cacheImages[url] == nil ?  false : true)
-        {
-            return self.cacheImages[url] == nil ?  false : true
-        }
-        return false
-    }
-    
-    
     private func getFromCache(request:ServerRequestModel) -> Any?
     {
         switch(request.requestType!)
@@ -214,16 +288,75 @@ class ServerController: NSObject
         }
     }
     
-    private func getImageFromCache(url:String) -> UIImage
+    private func checkImageInCache(url:String) -> Bool
     {
-//        if(self.cacheImages[url] != nil)
-//        {
-            return self.cacheImages[url]!
-//        }
-
+        print("IMAGE CACHE SIZE: " , cacheImages.count)
+        if(self.cacheImages[url] == nil ?  false : true)
+        {
+            return self.cacheImages[url] == nil ?  false : true
+        }
+        return false
     }
     
-    // MARK: helper methods
+    private func getImageFromCache(url:String) -> UIImage
+    {
+        return self.cacheImages[url]!
+    }
+    
+    private func updateCacheImagesByCacheLimit(url: String)
+    {
+        if(self.cacheImagesOrder.contains(url))
+        {
+            let index = self.cacheImagesOrder.index(of:url)!
+            self.cacheImagesOrder.remove(at: index)
+        }
+        self.cacheImagesOrder.insert(url, at: 0)
+        if(cacheImagesOrder.count > Constants.cacheImageSize)
+        {
+            if(cacheImagesOrder.last != nil)
+            {
+                cacheImages.removeValue(forKey: cacheImagesOrder.last!)
+                cacheImagesOrder.removeLast()
+            }
+        }
+    }
+    
+    // Methods related to QUEUE
+    func queueCompleted(queue:Constants.QUEUE_TYPE)->Bool
+    {
+        var pendingCompleted    = true
+        var inProgressCompleted = true
+        
+        if pendingRequestQueue[queue] != nil {
+            pendingCompleted = pendingRequestQueue[queue]!.count > 0 ? false : true
+        }
+        
+        if inprogressRequestQueue[queue] != nil {
+            inProgressCompleted = inprogressRequestQueue[queue]!.count > 0 ? false : true
+        }
+        return pendingCompleted && inProgressCompleted
+    }
+    
+    func setQueueStatus(status:Constants.QUEUE_STATUS,queue:Constants.QUEUE_TYPE, disableOtherQueues:Bool = false)
+    {
+        if disableOtherQueues {
+            for queueType in statusQueue.keys {
+                if queueType != queue && queueType != .main {
+                    statusQueue[queueType] = .paused
+                }
+            }
+        }
+        statusQueue[queue] = status
+    }
+    
+    func getQueueStatus(queueType:Constants.QUEUE_TYPE)->Constants.QUEUE_STATUS
+    {
+        if (statusQueue[queueType] != nil) {
+            return statusQueue[queueType]!
+        }
+        return .paused
+    }
+    
     private func existsInQueue(request:ServerRequestModel, queue:inout [Constants.QUEUE_TYPE:[ServerRequestModel]])->Bool
     {
         if let requests = queue[request.queue!] {
@@ -274,125 +407,6 @@ class ServerController: NSObject
                 printLogs()
             }
         }
-    }
-    
-    private func printLogs()
-    {
-        for queueType in statusQueue.keys {
-            if  statusQueue[queueType] == .playing {
-                print("Queue Active = " + String(describing: queueType))
-                
-                var requests = 0
-                if pendingRequestQueue[queueType] != nil {
-                    requests += pendingRequestQueue[queueType]!.count
-                }
-                if inprogressRequestQueue[queueType] != nil {
-                    requests += inprogressRequestQueue[queueType]!.count
-                }
-                print("request Count = ",requests)
-            }
-        }
-    }
-    
-    // MARK: public methods
-    public func sendRequest(request:ServerRequestModel) -> Void
-    {
-        let existInCache           = request.useCache == true ? self.existInCache(request:request) : false
-        let existInPendingRequest  = request.useCache == true ? self.existsInQueue(request:request,queue: &pendingRequestQueue) : false
-        let existInProgressRequest = request.useCache == true ? self.existsInQueue(request:request,queue: &inprogressRequestQueue) : false
-        
-        if(existInCache)
-        {
-            let val = self.getFromCache(request: request)
-            if(request.requestType == .image)
-            {
-                if(!checkImageInCache(url: request.url))
-                {
-                    request.dispatchSuccessCallback(response:val!)
-                }
-                else
-                {
-                    request.dispatchSuccessCallback(response:val!)
-                }
-            }
-            else
-            {
-                request.dispatchSuccessCallback(response:val!)
-            }
-        }
-        else if(existInPendingRequest == true)
-        {
-            request.dispatchNotFoundInCache()
-            let index   = pendingRequestQueue[request.queue!]!.index{$0.url == request.url}
-            let pendingRequest = pendingRequestQueue[request.queue!]![index!]
-            pendingRequest.AppendCallbacks(newsuccessCallback: request.successCallback, newfailureCallback: request.failureCallback, cacheFailureCallback: request.cacheFailureCallback)
-        }
-        else if(existInProgressRequest == true)
-        {
-            request.dispatchNotFoundInCache()
-            let index   = inprogressRequestQueue[request.queue!]!.index{$0.url == request.url}
-            let pendingRequest = inprogressRequestQueue[request.queue!]![index!];
-            pendingRequest.AppendCallbacks(newsuccessCallback: request.successCallback, newfailureCallback: request.failureCallback,cacheFailureCallback: request.cacheFailureCallback)
-        }
-        else
-        {
-            request.dispatchNotFoundInCache()
-            self.insertInPendingQueue(request: request)
-        }
-    }
-    
-    func startTicker()
-    {
-        countdownTimer = Timer.scheduledTimer(timeInterval: 0.1, target: self, selector: #selector(dispatchPendingRequests), userInfo: nil, repeats: true)
-    }
-    
-    // MARK: fetch catalog
-    func fetchCatalog(onSuccess:((_:ServerRequestModel, _:Any) -> Void)?, onFailure:((_:ServerRequestModel,_:String) -> Void)?)
-    {
-        let catalogURL = Constants.catalogURL
-        
-        let request = ServerRequestModel.create(type:REQUEST_TYPE.catalog, requestUrl: catalogURL, successCallbackFunc: onSuccess, failureCallbackFunc: onFailure,useLocalCache: true,info:"fetch_catalogue")
-        self.sendRequest(request: request)
-    }
-    
-    private func catalogSuccess(request:ServerRequestModel, data:Any) -> Void
-    {
-        catalogParser.ParseCatalogData(request:request ,data: data as! Data)
-    }
-    
-    func queueCompleted(queue:Constants.QUEUE_TYPE)->Bool
-    {
-        var pendingCompleted    = true
-        var inProgressCompleted = true
-        
-        if pendingRequestQueue[queue] != nil {
-            pendingCompleted = pendingRequestQueue[queue]!.count > 0 ? false : true
-        }
-        
-        if inprogressRequestQueue[queue] != nil {
-            inProgressCompleted = inprogressRequestQueue[queue]!.count > 0 ? false : true
-        }
-        return pendingCompleted && inProgressCompleted
-    }
-    
-    func setQueueStatus(status:Constants.QUEUE_STATUS,queue:Constants.QUEUE_TYPE, disableOtherQueues:Bool = false)
-    {
-        if disableOtherQueues {
-            for queueType in statusQueue.keys {
-                if queueType != queue && queueType != .main {
-                    statusQueue[queueType] = .paused
-                }
-            }
-        }
-        statusQueue[queue] = status
-    }
-    
-    func getQueueStatus(queueType:Constants.QUEUE_TYPE)->Constants.QUEUE_STATUS
-    {
-        if (statusQueue[queueType] != nil) {
-            return statusQueue[queueType]!
-        }
-        return .paused
     }
 
     private func getRequestType(requestModel:ServerRequestModel) -> String

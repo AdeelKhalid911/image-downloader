@@ -43,7 +43,7 @@
         <!--Catalog Table View Controller-->
         <scene sceneID="IfQ-Kl-sKv">
             <objects>
-                <tableViewController storyboardIdentifier="CatalogView" id="IiE-hl-Wma" customClass="CatalogTableViewController" customModule="ImageDownloader" customModuleProvider="target" sceneMemberID="viewController">
+                <tableViewController storyboardIdentifier="CatalogView" modalTransitionStyle="crossDissolve" id="IiE-hl-Wma" customClass="CatalogTableViewController" customModule="ImageDownloader" customModuleProvider="target" sceneMemberID="viewController">
                     <tableView key="view" clipsSubviews="YES" contentMode="scaleToFill" alwaysBounceVertical="YES" dataMode="prototypes" style="plain" separatorStyle="default" rowHeight="-1" estimatedRowHeight="-1" sectionHeaderHeight="28" sectionFooterHeight="28" id="56S-Xe-Rog">
                         <rect key="frame" x="0.0" y="0.0" width="414" height="736"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
@@ -56,8 +56,18 @@
                                     <rect key="frame" x="0.0" y="0.0" width="414" height="219.66666666666666"/>
                                     <autoresizingMask key="autoresizingMask"/>
                                     <subviews>
+                                        <label opaque="NO" userInteractionEnabled="NO" alpha="0.10000000000000001" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Image Not available" textAlignment="center" lineBreakMode="tailTruncation" numberOfLines="2" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="Jpo-M1-zsZ">
+                                            <rect key="frame" x="57" y="61.333333333333343" width="300" height="100"/>
+                                            <constraints>
+                                                <constraint firstAttribute="width" constant="300" id="C2E-CB-9XP"/>
+                                                <constraint firstAttribute="height" constant="100" id="cIZ-hg-Nl6"/>
+                                            </constraints>
+                                            <fontDescription key="fontDescription" type="system" pointSize="17"/>
+                                            <nil key="textColor"/>
+                                            <nil key="highlightedColor"/>
+                                        </label>
                                         <imageView userInteractionEnabled="NO" contentMode="scaleAspectFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="tuC-1y-1E2">
-                                            <rect key="frame" x="19" y="10" width="376" height="220.33333333333334"/>
+                                            <rect key="frame" x="19" y="0.0" width="376" height="220.33333333333334"/>
                                             <constraints>
                                                 <constraint firstAttribute="height" constant="220" id="Uqz-0j-lSr"/>
                                                 <constraint firstAttribute="width" constant="376" id="gqm-tH-PWB"/>
@@ -65,9 +75,11 @@
                                         </imageView>
                                     </subviews>
                                     <constraints>
-                                        <constraint firstItem="tuC-1y-1E2" firstAttribute="top" secondItem="M7g-Kw-4Q2" secondAttribute="top" constant="10" id="Gsm-MT-B4Q"/>
+                                        <constraint firstAttribute="bottom" secondItem="tuC-1y-1E2" secondAttribute="bottom" id="AQj-Q6-kGq"/>
+                                        <constraint firstItem="Jpo-M1-zsZ" firstAttribute="top" secondItem="M7g-Kw-4Q2" secondAttribute="topMargin" constant="50" id="Ivh-fo-9e9"/>
+                                        <constraint firstItem="tuC-1y-1E2" firstAttribute="top" secondItem="M7g-Kw-4Q2" secondAttribute="top" id="ML6-hm-sUl"/>
                                         <constraint firstItem="tuC-1y-1E2" firstAttribute="centerX" secondItem="M7g-Kw-4Q2" secondAttribute="centerX" id="Nor-HD-pTy"/>
-                                        <constraint firstAttribute="bottom" secondItem="tuC-1y-1E2" secondAttribute="bottom" constant="10" id="wm0-vH-hOK"/>
+                                        <constraint firstItem="Jpo-M1-zsZ" firstAttribute="centerX" secondItem="M7g-Kw-4Q2" secondAttribute="centerX" id="xgE-TF-JQp"/>
                                     </constraints>
                                 </tableViewCellContentView>
                                 <connections>
@@ -80,10 +92,13 @@
                             <outlet property="delegate" destination="IiE-hl-Wma" id="Nlu-eG-MWt"/>
                         </connections>
                     </tableView>
+                    <refreshControl key="refreshControl" opaque="NO" multipleTouchEnabled="YES" contentMode="center" insetsLayoutMarginsFromSafeArea="NO" enabled="NO" contentHorizontalAlignment="center" contentVerticalAlignment="center" id="frh-De-ng2">
+                        <autoresizingMask key="autoresizingMask"/>
+                    </refreshControl>
                 </tableViewController>
                 <placeholder placeholderIdentifier="IBFirstResponder" id="yX7-qr-8zP" userLabel="First Responder" sceneMemberID="firstResponder"/>
             </objects>
-            <point key="canvasLocation" x="1019" y="52"/>
+            <point key="canvasLocation" x="1583" y="63"/>
         </scene>
     </scenes>
 </document>
